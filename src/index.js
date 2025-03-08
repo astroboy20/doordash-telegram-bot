@@ -53,6 +53,7 @@ bot.on("text", async (ctx) => {
       )
         ? "Open"
         : "Closed";
+        
       console.log("Computed store status:", storeStatus);
 
       if (storeStatus === "Open") {
