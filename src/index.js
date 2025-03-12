@@ -1,7 +1,6 @@
 import dotenv from "dotenv";
 import { Telegraf, Markup } from "telegraf";
 import puppeteer from "puppeteer";
-import * as cheerio from "cheerio";
 import express from "express";
 
 dotenv.config();
@@ -36,12 +35,10 @@ bot.on("text", async (ctx) => {
   }
 
   // Extract the store name from the URL.
-  // For example, in "/store/kibo-sushi-toronto-46201/20352947/" the store name is at index 2.
   let storeName = "Store";
   try {
     const parsedUrl = new URL(url);
     const pathParts = parsedUrl.pathname.split("/");
-    // pathParts example: ["", "store", "kibo-sushi-toronto-46201", "20352947", ""]
     if (pathParts.length >= 3) {
       storeName = pathParts[2];
     }
@@ -57,14 +54,16 @@ bot.on("text", async (ctx) => {
     // Launch Puppeteer to load the DoorDash store page
     const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
+    // Increase default navigation timeout to 60 seconds
+    page.setDefaultNavigationTimeout(60000);
     await page.setUserAgent(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
     );
-    await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
     const content = await page.content();
     await browser.close();
 
-    // Check the store status based on content (example logic)
+    // Determine store status based on page content
     const storeStatus = !content.includes("This store is currently unavailable") ? "Open" : "Closed";
     console.log("Computed DoorDash store status:", storeStatus);
 
@@ -76,27 +75,24 @@ bot.on("text", async (ctx) => {
     // Launch Puppeteer to perform the Google search
     const browser2 = await puppeteer.launch({ headless: true });
     const page2 = await browser2.newPage();
+    page2.setDefaultNavigationTimeout(60000);
     await page2.setUserAgent(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
     );
-    await page2.goto(googleSearchUrl, { waitUntil: "networkidle0", timeout: 30000 });
-    const googleContent = await page2.content();
-    await browser2.close();
-
-    // Parse the Google search results to find an order.online link
-    const $google = cheerio.load(googleContent);
-    let orderOnlineLink = null;
-    $google("a").each((i, element) => {
-      const href = $google(element).attr("href");
-      if (href && href.includes("order.online")) {
-        // Google returns links in a /url?q=... format.
-        const match = href.match(/\/url\?q=([^&]+)/);
-        if (match && match[1]) {
-          orderOnlineLink = decodeURIComponent(match[1]);
-          return false; // Break the loop after the first match
+    await page2.goto(googleSearchUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+    
+    // Use evaluate to scan the rendered DOM for an order.online link.
+    const orderOnlineLink = await page2.evaluate(() => {
+      const anchors = Array.from(document.querySelectorAll("a"));
+      for (const a of anchors) {
+        if (a.href && a.href.includes("order.online")) {
+          return a.href;
         }
       }
+      return null;
     });
+    await browser2.close();
+    
     console.log("Found order.online link:", orderOnlineLink);
 
     // Build the reply message
