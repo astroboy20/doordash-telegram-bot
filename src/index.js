@@ -81,6 +81,7 @@ bot.on("text", async (ctx) => {
     );
     await page2.goto(googleSearchUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     
+
     // Use evaluate to scan the rendered DOM for an order.online link.
     const orderOnlineLink = await page2.evaluate(() => {
       const anchors = Array.from(document.querySelectorAll("a"));
@@ -95,6 +96,7 @@ bot.on("text", async (ctx) => {
     
     console.log("Found order.online link:", orderOnlineLink);
 
+    
     // Build the reply message
     let replyText = "";
     if (storeStatus === "Open") {
